@@ -1,0 +1,124 @@
+package dev.bazarski.clashqualifiers.services;
+
+import dev.bazarski.clashqualifiers.common.JsonHelper;
+import dev.bazarski.clashqualifiers.errors.exceptions.TooManyRequestsException;
+import dev.bazarski.clashqualifiers.props.RiotApiProperties;
+import dev.bazarski.clashqualifiers.props.SearchProperties;
+import dev.bazarski.clashqualifiers.records.*;
+import dev.bazarski.clashqualifiers.records.match.Match;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.stereotype.Service;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static java.lang.StringTemplate.STR;
+
+
+@Service
+public class ClashQualifiersService {
+
+    private static final Logger log = LoggerFactory.getLogger(ClashQualifiersService.class);
+    private final WebClient client;
+    private final RiotApiProperties props;
+    private final SearchProperties searchProps;
+
+
+    public ClashQualifiersService(WebClient client, RiotApiProperties props, SearchProperties searchProps) {
+        this.client = client;
+        this.props = props;
+        this.searchProps = searchProps;
+    }
+
+    Mono<String[]> getListOfMatchIdsByPuuid(String puuid, MultiValueMap<String, String> params) {
+        return client.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path(STR."/lol/match/v5/matches/by-puuid/\{puuid}/ids/")
+                        .queryParams(params)
+                        .build()
+                )
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, response -> {
+                    throw new TooManyRequestsException(response.statusCode());
+                })
+                .bodyToMono(String[].class);
+    }
+
+    Mono<Match> getMatch(String matchId) {
+        return client.get()
+                .uri(STR."/lol/match/v5/matches/\{matchId}")
+                .retrieve()
+                .bodyToMono(Match.class);
+    }
+
+    public Flux<Standing> getMatchesAndCountPoints() {
+        List<Account> accounts = JsonHelper.readAccounts();
+        Flux<Match> matchIds = getDistinctMatchIdsForAccountsFromProps()
+                .index()
+                .flatMapSequential(indexedMatchId -> getMatch(indexedMatchId.getT2())
+                        .delaySubscription(Duration.ofMillis(indexedMatchId.getT1() * 50))
+                );
+
+        return matchIds
+                .flatMapSequential(match -> filterOccurrences(match, accounts))
+                .flatMapSequential(this::mapPoints)
+                .groupBy(Standing::puuid)
+                .flatMap(this::sumPoints)
+                .sort((standing1, standing2) -> Double.compare(standing2.points(), standing1.points()));
+    }
+
+    public Flux<String> getDistinctMatchIdsForAccountsFromProps() {
+        Flux<Account> accounts = Flux.fromIterable(searchProps.getAccounts());
+        Flux<String> matchIds = accounts.flatMapSequential(account ->
+                getListOfMatchIdsByPuuid(account.puuid(), searchProps.getParams()).flatMapMany(Flux::fromArray)
+        );
+
+        return matchIds.distinct()
+                .index()
+                .flatMap(indexedMatchId -> Mono.just(indexedMatchId.getT2())
+                        .delaySubscription(Duration.ofMillis(indexedMatchId.getT1() * 50))
+                );
+    }
+
+    Mono<GameDetails> filterOccurrences(Match match, List<Account> accounts) {
+        Set<String> accountPuuids = accounts.stream()
+                .map(Account::puuid)
+                .collect(Collectors.toSet());
+
+        return Mono.just(new GameDetails(
+                match.metadata().matchId(),
+                match.info().participants().stream().filter(participant -> accountPuuids.contains(participant.puuid())).toList()
+        ));
+    }
+
+    Flux<Standing> mapPoints(GameDetails gameDetails) {
+        List<Participant> participants = gameDetails.participants();
+        Stream<Standing> standing =  switch (participants.size()) {
+            default -> participants.stream().map(participant -> new Standing(participant.puuid(), participant.gameName(), 0.0));
+            case 2 -> participants.stream().map(participant -> new Standing(participant.puuid(), participant.gameName(), 0.5));
+            case 3, 6, 8, 10 -> participants.stream().map(participant -> new Standing(participant.puuid(), participant.gameName(), 1.0));
+            case 4 -> participants.stream().map(participant -> new Standing(participant.puuid(), participant.gameName(), 2.0));
+            case 5 -> participants.stream().map(participant -> new Standing(participant.puuid(), participant.gameName(), 3.0));
+        };
+
+        return Flux.fromStream(standing);
+    }
+
+    Mono<Standing> sumPoints(Flux<Standing> standings) {
+        return standings.reduce((standing1, standing2) ->
+                new Standing(
+                        standing1.puuid(),
+                        standing1.gameName(),
+                        standing2.points() + standing1.points()
+                )
+        );
+    }
+}
