@@ -41,7 +41,7 @@ public class ClashQualifiersService {
         this.accounts = JsonHelper.readAccounts();
     }
 
-    Mono<String[]> getListOfMatchIdsByPuuid(String puuid, MultiValueMap<String, String> params) {
+    Flux<String> getListOfMatchIdsByPuuid(String puuid, MultiValueMap<String, String> params) {
         return client.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(STR."/lol/match/v5/matches/by-puuid/\{puuid}/ids/")
@@ -52,13 +52,17 @@ public class ClashQualifiersService {
                 .onStatus(HttpStatusCode::is4xxClientError, response -> {
                     throw new TooManyRequestsException(response.statusCode());
                 })
-                .bodyToMono(String[].class);
+                .bodyToMono(String[].class)
+                .flatMapMany(Flux::fromArray);
     }
 
     Mono<Match> getMatch(String matchId) {
         return client.get()
                 .uri(STR."/lol/match/v5/matches/\{matchId}")
                 .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, response -> {
+                    throw new TooManyRequestsException(response.statusCode());
+                })
                 .bodyToMono(Match.class);
     }
 
@@ -70,7 +74,7 @@ public class ClashQualifiersService {
                 );
 
         return matchIds
-                .flatMapSequential(match -> filterOccurrences(match, accounts))
+                .flatMapSequential(this::filterOccurrences)
                 .flatMapSequential(this::mapPoints)
                 .groupBy(Standing::puuid)
                 .flatMap(this::sumPoints)
@@ -80,8 +84,9 @@ public class ClashQualifiersService {
 
     public Flux<String> getDistinctMatchIdsForAccountsFromProps() {
         Flux<Account> accs = Flux.fromIterable(accounts);
-        Flux<String> matchIds = accs.flatMapSequential(account ->
-                getListOfMatchIdsByPuuid(account.puuid(), searchProps.getParams()).flatMapMany(Flux::fromArray)
+        Flux<String> matchIds = accs.flatMapSequential(account -> getListOfMatchIdsByPuuid(
+                account.puuid(),
+                searchProps.getParams())
         );
 
         return matchIds
@@ -92,7 +97,7 @@ public class ClashQualifiersService {
                 );
     }
 
-    Mono<GameDetails> filterOccurrences(Match match, List<Account> accounts) {
+    Mono<GameDetails> filterOccurrences(Match match) {
         Set<String> accountPuuids = accounts.stream()
                 .map(Account::puuid)
                 .collect(Collectors.toSet());
@@ -120,13 +125,10 @@ public class ClashQualifiersService {
     }
 
     Mono<Standing> sumPoints(Flux<Standing> standings) {
-        return standings
-                .reduce((standing1, standing2) ->
-                        new Standing(
-                                standing1.puuid(),
-                                standing1.gameName(),
-                                standing2.points() + standing1.points()
-                        )
+        return standings.reduce((standing1, standing2) -> new Standing(
+                standing1.puuid(),
+                standing1.gameName(),
+                standing2.points() + standing1.points())
         );
     }
 
