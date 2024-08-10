@@ -4,18 +4,14 @@ import dev.bazarski.clashqualifiers.errors.ErrorMessages;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 
-public class TooManyRequestsException extends RuntimeException {
+public class AccountNotFoundException extends RuntimeException {
     private HttpStatusCode status;
     private String message;
 
-    public TooManyRequestsException(HttpStatusCode httpStatus) {
+    public AccountNotFoundException() {
         super();
-        this.status = httpStatus;
-        this.message = ErrorMessages.TOO_MANY_REQUESTS;
-    }
-
-    public Integer getStatus() {
-        return status.value();
+        this.status = HttpStatus.NOT_FOUND;
+        this.message = ErrorMessages.ACCOUNT_NOT_FOUND;
     }
 
     @Override
