@@ -1,6 +1,8 @@
 package dev.bazarski.clashqualifiers.records;
 
-public record Standing(String puuid,
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+public record Standing(@JsonIgnore String puuid,
                        String gameName,
                        Double points
 ) {}

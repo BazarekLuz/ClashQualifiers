@@ -1,10 +1,9 @@
 package dev.bazarski.clashqualifiers.services;
 
-import dev.bazarski.clashqualifiers.common.JsonHelper;
 import dev.bazarski.clashqualifiers.errors.exceptions.AccountNotFoundException;
 import dev.bazarski.clashqualifiers.errors.exceptions.TooManyRequestsException;
 import dev.bazarski.clashqualifiers.props.RiotApiProperties;
-import dev.bazarski.clashqualifiers.props.SearchProperties;
+import dev.bazarski.clashqualifiers.props.SearchProps.SearchProperties;
 import dev.bazarski.clashqualifiers.records.*;
 import dev.bazarski.clashqualifiers.records.match.Match;
 import org.slf4j.Logger;
@@ -38,13 +37,13 @@ public class ClashQualifiersService {
         this.client = client;
         this.props = props;
         this.searchProps = searchProps;
-        this.accounts = JsonHelper.readAccounts();
+        this.accounts = searchProps.getAccounts();
     }
 
     Flux<String> getListOfMatchIdsByPuuid(String puuid, MultiValueMap<String, String> params) {
         return client.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path(STR."/lol/match/v5/matches/by-puuid/\{puuid}/ids/")
+                        .path(STR."/lol/match/v5/matches/by-puuid/\{puuid}/ids")
                         .queryParams(params)
                         .build()
                 )
@@ -94,7 +93,8 @@ public class ClashQualifiersService {
                 .index()
                 .flatMap(indexedMatchId -> Mono.just(indexedMatchId.getT2())
                         .delaySubscription(Duration.ofMillis(indexedMatchId.getT1() * 50))
-                );
+                )
+                .doOnNext(log::info);
     }
 
     Mono<GameDetails> filterOccurrences(Match match) {

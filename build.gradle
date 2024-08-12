@@ -24,11 +24,14 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'org.wiremock:wiremock-jetty12:3.9.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.withType(JavaCompile) {
-    options.compilerArgs += '--enable-preview'
+    options.compilerArgs += "--enable-preview"
+    sourceCompatibility = "22"
+    targetCompatibility = "22"
 }
 
 tasks.withType(Test) {
@@ -37,6 +40,11 @@ tasks.withType(Test) {
 
 tasks.withType(JavaExec) {
     jvmArgs += '--enable-preview'
+}
+
+tasks.withType(Javadoc) {
+    options.addBooleanOption('-enable-preview', true)
+    options.source = "22"
 }
 
 tasks.named('test') {

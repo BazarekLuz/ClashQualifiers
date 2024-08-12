@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/lol/match/v5/matches/by-puuid/[a-zA-Z0-9_-]+/ids",
+    "queryParameters": {
+      "startTime" : {
+        "equalTo": "1722952800"
+      },
+      "endTime": {
+        "equalTo": "1722981540"
+      },
+      "queue": {
+        "equalTo": "440"
+      },
+      "type": {
+        "equalTo": "ranked"
+      },
+      "start": {
+        "equalTo": "0"
+      },
+      "count": {
+        "equalTo": "100"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": [
+      "EUN1_3646401796",
+      "EUN1_3646326039",
+      "EUN1_3646299171"
+    ]
+  }
+}
