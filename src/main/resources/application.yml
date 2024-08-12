@@ -1,3 +1,7 @@
 api:
   token:
   general-url: https://europe.api.riotgames.com
+
+spring:
+  profiles:
+    active: default
