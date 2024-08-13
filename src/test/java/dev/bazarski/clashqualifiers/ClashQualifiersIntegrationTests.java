@@ -22,12 +22,30 @@ public class ClashQualifiersIntegrationTests {
     }
 
     @Test
-    void initialTest() {
+    void shouldReturnStatus200() {
+        var x = client.get()
+                .uri("/api/qualifiers/matchIds")
+                .exchange()
+                .expectStatus().isOk().expectBody().returnResult();
+        System.out.println(x);
+    }
+
+    @Test
+    void shouldReturn6Entities() {
         var x = client.get()
                 .uri("/api/qualifiers/matchIds")
                 .exchange()
                 .expectBody()
-                .returnResult();
-        System.out.println(x);
+                .jsonPath("$.size()").isEqualTo(6);
+    }
+
+    @Test
+    void shouldReturnCorrectJsonBody() {
+        var x = client.get()
+                .uri("/api/qualifiers/matchIds")
+                .exchange()
+                .expectBody()
+                .jsonPath("$.[*].gameName").isNotEmpty()
+                .jsonPath("$.[*].points").isNotEmpty();
     }
 }
